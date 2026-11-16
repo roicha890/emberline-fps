@@ -113,6 +113,7 @@ export function createBots(scene, world, onEvent) {
         : [[18, -24], [15, -26], [20, -22], [13, -23], [17, -27]][index]);
       soldier.route = (attack ? DEFEND_ROUTES : ATTACK_ROUTES)[index].map(([x, z]) => new THREE.Vector3(x, 0, z));
       soldier.mode = attack ? 'hold' : 'advance';
+      soldier.bombCarrier = index === 0;   // frost-1 carries the bomb when frost attacks
       soldier.holdUntil = 1.5 + index * 0.2;
       soldier.group.visible = true;
     }
@@ -212,7 +213,7 @@ export function createBots(scene, world, onEvent) {
       soldier.fireCd = Math.max(0, soldier.fireCd - dt);
 
       const target = acquire(soldier, world);
-      if (target) {
+      if (target && !soldier.bombCarrier) {
         soldier.targetId = target.id;
         soldier.reactLeft = soldier.reactLeft || REACTION;
         soldier.reactLeft -= dt;
@@ -248,6 +249,12 @@ export function createBots(scene, world, onEvent) {
       if (api.time() < soldier.holdUntil) continue;
       const wp = soldier.route[Math.min(soldier.routeIndex, soldier.route.length - 1)];
       const arrived = moveToward(soldier, wp, dt);
+      // blocked too long on this waypoint? skip ahead — no pathfinding, so slide past obstacles
+      if (arrived) soldier.lastProgressAt = api.time();
+      else if (api.time() - (soldier.lastProgressAt ?? api.time()) > 6) {
+        soldier.lastProgressAt = api.time();
+        if (soldier.routeIndex < soldier.route.length - 1) soldier.routeIndex += 1;
+      }
       if (arrived) {
         if (soldier.routeIndex < soldier.route.length - 1) {
           if (api.time() >= soldier.repathAt) {
